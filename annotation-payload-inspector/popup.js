@@ -1,6 +1,24 @@
 document.addEventListener("DOMContentLoaded", () => {
   const container = document.getElementById("data");
 
+  async function copyText(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (_) {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "absolute";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      return ok;
+    }
+  }
+
   chrome.storage.local.get({ apiLogs: [] }, (res) => {
     const logs = res.apiLogs || [];
 
@@ -65,16 +83,50 @@ document.addEventListener("DOMContentLoaded", () => {
       time.className = "time";
       time.textContent = modeData.log.time || "";
 
+      const copyBtn = document.createElement("button");
+      copyBtn.className = "copy-btn";
+      copyBtn.textContent = "Copy";
+
+      const timeAndCopy = document.createElement("span");
+      timeAndCopy.style.display = "flex";
+      timeAndCopy.style.alignItems = "center";
+      timeAndCopy.style.gap = "6px";
+      timeAndCopy.appendChild(time);
+      timeAndCopy.appendChild(copyBtn);
+
       row.appendChild(method);
-      row.appendChild(time);
+      row.appendChild(timeAndCopy);
+
+      const uniqueAnnotatedBy = [...new Set(
+        modeData.annotations
+          .map((a) => a?.annotatedByEmail || "N/A")
+          .filter(Boolean)
+      )];
+      const imageServiceIds = modeData.annotations
+        .map((a) => a?.imageServiceId || "N/A")
+        .filter(Boolean);
 
       const summary = document.createElement("pre");
-      const lines = modeData.annotations.map((a, index) => {
-        const imageServiceId = a?.imageServiceId || "N/A";
-        const annotatedByEmail = a?.annotatedByEmail || "N/A";
-        return `${index + 1}. imageServiceId: ${imageServiceId}\n   annotatedByEmail: ${annotatedByEmail}`;
+      const lines = [];
+      lines.push(`annotatedByEmail: ${uniqueAnnotatedBy.join(", ") || "N/A"}`);
+      lines.push("imageServiceId:");
+      imageServiceIds.forEach((id, index) => {
+        lines.push(`${index + 1}. ${id}`);
       });
-      summary.textContent = lines.join("\n\n");
+      summary.textContent = lines.join("\n");
+
+      copyBtn.addEventListener("click", async () => {
+        const compact = [];
+        compact.push(`annotatedByEmail: ${uniqueAnnotatedBy.join(", ") || "N/A"}\t${modeData.log.time || ""}`);
+        imageServiceIds.forEach((id) => {
+          compact.push(id);
+        });
+        const ok = await copyText(compact.join("\n"));
+        copyBtn.textContent = ok ? "Copied" : "Copy failed";
+        setTimeout(() => {
+          copyBtn.textContent = "Copy";
+        }, 1200);
+      });
 
       item.appendChild(row);
       item.appendChild(summary);
