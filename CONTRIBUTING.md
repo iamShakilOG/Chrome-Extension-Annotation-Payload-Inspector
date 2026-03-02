@@ -5,7 +5,7 @@
 1. Clone the repository.
 2. Open `chrome://extensions`.
 3. Enable Developer Mode.
-4. Load unpacked extension from `network_info chrome extension`.
+4. Load unpacked extension from `annotation-payload-inspector`.
 
 ## Development Guidelines
 
@@ -22,4 +22,3 @@
 2. Reload target web page.
 3. Trigger `getAnnotations` calls.
 4. Confirm popup displays `imageServiceId` and `annotatedByEmail`.
-

@@ -17,7 +17,7 @@ For both modes (when available):
 ## Project Structure
 
 ```text
-network_info chrome extension/
+annotation-payload-inspector/
   manifest.json
   background.js
   content.js
@@ -39,7 +39,7 @@ network_info chrome extension/
 1. Open `chrome://extensions`.
 2. Enable `Developer mode`.
 3. Click `Load unpacked`.
-4. Select the folder: `network_info chrome extension`.
+4. Select the folder: `annotation-payload-inspector`.
 
 ## Usage
 
