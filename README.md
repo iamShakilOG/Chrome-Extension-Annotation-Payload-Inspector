@@ -48,6 +48,13 @@ annotation-payload-inspector/
 3. Open the extension popup.
 4. View extracted entries under `ANNOTATION_MODE` and `QA_MODE`.
 
+## Google Sheets Auto Sync
+
+This project supports automatic sync to Google Sheets for `ANNOTATION_MODE` and `QA_MODE`.
+
+- Setup guide: `GOOGLE_SHEETS_SETUP.md`
+- Configuration point: `annotation-payload-inspector/background.js` -> `SHEET_WEBHOOK_URL`
+
 ## Notes
 
 - Stored logs are capped (latest entries only).

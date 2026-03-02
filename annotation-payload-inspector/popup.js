@@ -19,47 +19,63 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  chrome.storage.local.get({ apiLogs: [] }, (res) => {
-    const logs = res.apiLogs || [];
-
-    if (!logs.length) {
-      container.textContent = "No annotation captured.";
-      return;
-    }
-
+  chrome.storage.local.get({ latestModeData: {}, apiLogs: [] }, (res) => {
     const modes = {
       ANNOTATION_MODE: null,
       QA_MODE: null
     };
 
-    for (let i = logs.length - 1; i >= 0; i--) {
-      const log = logs[i];
-      if (!log || !String(log.url || "").includes("getAnnotations")) continue;
+    const latestModeData =
+      res.latestModeData && typeof res.latestModeData === "object"
+        ? res.latestModeData
+        : {};
 
-      const url = String(log.url || "");
-      const mode = url.includes("QA_MODE")
-        ? "QA_MODE"
-        : (url.includes("ANNOTATION_MODE") ? "ANNOTATION_MODE" : null);
+    ["ANNOTATION_MODE", "QA_MODE"].forEach((modeName) => {
+      const mode = latestModeData[modeName];
+      if (!mode) return;
+      modes[modeName] = {
+        time: mode.time || "",
+        uniqueAnnotatedBy: Array.isArray(mode.annotatedByEmail) ? mode.annotatedByEmail : [],
+        imageServiceIds: Array.isArray(mode.imageServiceIds) ? mode.imageServiceIds : []
+      };
+    });
 
-      if (!mode || modes[mode]) continue;
+    // Fallback for old stored data where latestModeData is not yet present.
+    if (!modes.ANNOTATION_MODE && !modes.QA_MODE) {
+      const logs = Array.isArray(res.apiLogs) ? res.apiLogs : [];
+      for (let i = logs.length - 1; i >= 0; i--) {
+        const log = logs[i];
+        if (!log || !String(log.url || "").includes("getAnnotations")) continue;
 
-      try {
-        const parsed = JSON.parse(log.body || "{}");
-        if (Array.isArray(parsed.annotationData) && parsed.annotationData.length) {
-          modes[mode] = {
-            log,
-            annotations: parsed.annotationData
+        const url = String(log.url || "");
+        const modeName = url.includes("QA_MODE")
+          ? "QA_MODE"
+          : (url.includes("ANNOTATION_MODE") ? "ANNOTATION_MODE" : null);
+
+        if (!modeName || modes[modeName]) continue;
+
+        try {
+          const parsed = JSON.parse(log.body || "{}");
+          const annotations = Array.isArray(parsed.annotationData) ? parsed.annotationData : [];
+          if (!annotations.length) continue;
+
+          modes[modeName] = {
+            time: log.time || "",
+            uniqueAnnotatedBy: [...new Set(
+              annotations.map((a) => a?.annotatedByEmail || "N/A").filter(Boolean)
+            )],
+            imageServiceIds: annotations.map((a) => a?.imageServiceId || "N/A").filter(Boolean)
           };
+        } catch (_) {
+          // Skip invalid/truncated JSON.
         }
-      } catch (_) {
-        // Continue searching older logs if current payload is not valid JSON.
-      }
 
-      if (modes.ANNOTATION_MODE && modes.QA_MODE) break;
+        if (modes.ANNOTATION_MODE && modes.QA_MODE) break;
+      }
     }
 
     if (!modes.ANNOTATION_MODE && !modes.QA_MODE) {
-      container.textContent = "No parseable QA_MODE/ANNOTATION_MODE payload found.";
+      container.textContent = "No QA_MODE/ANNOTATION_MODE data captured yet.";
       return;
     }
 
@@ -81,7 +97,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const time = document.createElement("span");
       time.className = "time";
-      time.textContent = modeData.log.time || "";
+      time.textContent = modeData.time || "";
 
       const copyBtn = document.createElement("button");
       copyBtn.className = "copy-btn";
@@ -97,14 +113,8 @@ document.addEventListener("DOMContentLoaded", () => {
       row.appendChild(method);
       row.appendChild(timeAndCopy);
 
-      const uniqueAnnotatedBy = [...new Set(
-        modeData.annotations
-          .map((a) => a?.annotatedByEmail || "N/A")
-          .filter(Boolean)
-      )];
-      const imageServiceIds = modeData.annotations
-        .map((a) => a?.imageServiceId || "N/A")
-        .filter(Boolean);
+      const uniqueAnnotatedBy = modeData.uniqueAnnotatedBy || [];
+      const imageServiceIds = modeData.imageServiceIds || [];
 
       const summary = document.createElement("pre");
       const lines = [];
@@ -117,7 +127,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       copyBtn.addEventListener("click", async () => {
         const compact = [];
-        compact.push(`annotatedByEmail: ${uniqueAnnotatedBy.join(", ") || "N/A"}\t${modeData.log.time || ""}`);
+        compact.push(`annotatedByEmail: ${uniqueAnnotatedBy.join(", ") || "N/A"}\t${modeData.time || ""}`);
         imageServiceIds.forEach((id) => {
           compact.push(id);
         });

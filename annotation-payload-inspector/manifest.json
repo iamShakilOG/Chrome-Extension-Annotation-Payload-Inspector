@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Annotation Payload Inspector",
   "version": "1.0",
-  "permissions": ["storage", "scripting", "activeTab"],
+  "permissions": ["storage", "scripting", "activeTab", "alarms"],
   "host_permissions": ["<all_urls>"],
   "background": { "service_worker": "background.js" },
   "action": { "default_popup": "popup.html" },

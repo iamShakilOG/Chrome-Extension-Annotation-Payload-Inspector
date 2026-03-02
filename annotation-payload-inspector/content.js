@@ -7,7 +7,12 @@ s.onload = () => s.remove();
 // Listen for messages from the page
 window.addEventListener("message", (event) => {
   if (event.source !== window) return;
-  if (event.data.type && event.data.type === "API_CAPTURE") {
-    chrome.runtime.sendMessage(event.data.payload);
-  }
+  if (!event.data || typeof event.data !== "object") return;
+  if (event.data.type !== "API_CAPTURE") return;
+
+  chrome.runtime.sendMessage({
+    ...(event.data.payload || {}),
+    pageUrl: window.location.href,
+    pageTitle: document.title
+  });
 });
