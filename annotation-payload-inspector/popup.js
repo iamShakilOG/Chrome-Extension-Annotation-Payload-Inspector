@@ -19,7 +19,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  chrome.storage.local.get({ latestModeData: {}, apiLogs: [] }, (res) => {
+  chrome.storage.local.get({ latestModeData: {}, apiLogs: [], loggedInUser: null }, (res) => {
     const modes = {
       ANNOTATION_MODE: null,
       QA_MODE: null
@@ -80,6 +80,23 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     container.innerHTML = "";
+
+    const loggedInUser = res.loggedInUser;
+    if (loggedInUser && (loggedInUser.name || loggedInUser.email)) {
+      const userItem = document.createElement("div");
+      userItem.className = "item";
+      userItem.style.marginBottom = "10px";
+
+      const userSummary = document.createElement("pre");
+      const userLines = [];
+      userLines.push(`Logged in user: ${loggedInUser.name || "N/A"}`);
+      userLines.push(`Email: ${loggedInUser.email || "N/A"}`);
+      userSummary.textContent = userLines.join("\n");
+
+      userItem.appendChild(userSummary);
+      container.appendChild(userItem);
+    }
+
     ["ANNOTATION_MODE", "QA_MODE"].forEach((modeName) => {
       const modeData = modes[modeName];
       if (!modeData) return;

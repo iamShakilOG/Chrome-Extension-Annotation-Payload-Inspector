@@ -40,14 +40,94 @@ function parseAnnotationData(bodyText) {
   }
 }
 
-function buildSheetRows({ mode, apiUrl, pageUrl, method, annotationData }) {
+function parseLoggedInUser(bodyText) {
+  try {
+    const parsed = JSON.parse(bodyText || "{}");
+    const user = parsed?.user;
+    if (!user || typeof user !== "object") return null;
+    return {
+      id: user.id ?? "",
+      name: user.name || "",
+      email: user.email || user.canonicalEmail || ""
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
+function decodeJwtPayload(token) {
+  if (!token || typeof token !== "string") return null;
+  const parts = token.split(".");
+  if (parts.length < 2) return null;
+
+  try {
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+    const json = atob(padded);
+    return JSON.parse(json);
+  } catch (_) {
+    return null;
+  }
+}
+
+function parseLoggedInUserFromHeaders(msg) {
+  if (!msg || typeof msg !== "object") return null;
+
+  const requestEmail = extractEmail(String(msg.requestEmail || ""));
+  const tokenPayload = decodeJwtPayload(String(msg.authToken || ""));
+  const tokenEmail = extractEmail(String(tokenPayload?.email || tokenPayload?.canonicalEmail || ""));
+  const tokenName = String(tokenPayload?.name || "");
+  const tokenId = tokenPayload?.id ?? "";
+
+  const email = tokenEmail || requestEmail || "";
+  const name = tokenName || "";
+
+  if (!email && !name) return null;
+  return { id: tokenId, name, email };
+}
+
+function extractEmail(value) {
+  if (typeof value !== "string") return "";
+  const match = value.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+  return match ? match[0] : "";
+}
+
+function normalizeAnnotationData(annotationData) {
+  if (!Array.isArray(annotationData)) return [];
+
+  const firstValidEmail = annotationData
+    .map((item) => extractEmail(item?.annotatedByEmail))
+    .find((email) => Boolean(email)) || "";
+
+  return annotationData.map((item) => {
+    const currentEmail = extractEmail(item?.annotatedByEmail);
+    return {
+      ...item,
+      annotatedByEmail: currentEmail || firstValidEmail || "N/A"
+    };
+  });
+}
+
+function buildSheetRows({
+  mode,
+  apiUrl,
+  pageUrl,
+  method,
+  annotationData,
+  sessionUserName,
+  sessionUserEmail
+}) {
   const capturedAtIso = new Date().toISOString();
   const capturedAtLocal = new Date().toLocaleString();
+  const normalizedSessionEmail = extractEmail(String(sessionUserEmail || ""));
 
   return annotationData.map((item) => ({
     mode,
-    annotatedByEmail: item?.annotatedByEmail || "N/A",
+    annotatedByEmail:
+      extractEmail(String(item?.annotatedByEmail || "")) || normalizedSessionEmail || "N/A",
     imageServiceId: item?.imageServiceId || "N/A",
+    sessionUserName: sessionUserName || "N/A",
+    sessionUserEmail: normalizedSessionEmail || "N/A",
     apiCapturedAtIso: capturedAtIso,
     apiCapturedAtLocal: capturedAtLocal,
     apiUrl: apiUrl || "N/A",
@@ -57,7 +137,7 @@ function buildSheetRows({ mode, apiUrl, pageUrl, method, annotationData }) {
 }
 
 function rowKey(row) {
-  return `${row.mode}|${row.annotatedByEmail}|${row.imageServiceId}`;
+  return `${row.mode}|${row.annotatedByEmail}|${row.imageServiceId}|${row.sessionUserEmail}|${row.apiCapturedAtIso}`;
 }
 
 async function postRowsToWebhook(rows) {
@@ -118,6 +198,19 @@ async function storeLatestModeSummary(mode, annotationData, timeLabel) {
   };
 
   await storageSet({ latestModeData });
+}
+
+async function storeLoggedInUser(user) {
+  if (!user || typeof user !== "object") return;
+
+  await storageSet({
+    loggedInUser: {
+      id: user.id ?? "",
+      name: user.name || "",
+      email: user.email || "",
+      updatedAtIso: new Date().toISOString()
+    }
+  });
 }
 
 async function ensureFlushAlarm() {
@@ -242,6 +335,20 @@ chrome.runtime.onMessage.addListener((msg) => {
 
   storeLog(entry);
 
+  const headerUser = parseLoggedInUserFromHeaders(msg);
+  let currentRequestUser = headerUser;
+  if (headerUser) {
+    storeLoggedInUser(headerUser);
+  }
+
+  if (url.includes("getUserData")) {
+    const user = parseLoggedInUser(rawBody);
+    if (user) {
+      currentRequestUser = user;
+      storeLoggedInUser(user);
+    }
+  }
+
   if (!isAnnotationPayload) return;
 
   const mode = detectModeFromUrl(url);
@@ -249,18 +356,30 @@ chrome.runtime.onMessage.addListener((msg) => {
 
   const annotationData = parseAnnotationData(rawBody);
   if (!annotationData.length) return;
+  const normalizedAnnotationData = normalizeAnnotationData(annotationData);
 
-  const rows = buildSheetRows({
-    mode,
-    apiUrl: url,
-    pageUrl: String(msg.pageUrl || ""),
-    method: msg.method || "N/A",
-    annotationData
-  });
+  storeLatestModeSummary(mode, normalizedAnnotationData, entry.time);
+  storageGet({ loggedInUser: null }).then((state) => {
+    const loggedInUser =
+      state.loggedInUser && typeof state.loggedInUser === "object"
+        ? state.loggedInUser
+        : null;
+    const fallbackEmailFromAnnotation =
+      normalizedAnnotationData.find((item) => extractEmail(item?.annotatedByEmail))?.annotatedByEmail || "";
 
-  storeLatestModeSummary(mode, annotationData, entry.time);
+    const rows = buildSheetRows({
+      mode,
+      apiUrl: url,
+      pageUrl: String(msg.pageUrl || ""),
+      method: msg.method || "N/A",
+      annotationData: normalizedAnnotationData,
+      sessionUserName: currentRequestUser?.name || loggedInUser?.name || "",
+      sessionUserEmail:
+        currentRequestUser?.email || loggedInUser?.email || fallbackEmailFromAnnotation || ""
+    });
 
-  enqueueRows(rows).then(() => {
-    flushQueue();
+    enqueueRows(rows).then(() => {
+      flushQueue();
+    });
   });
 });

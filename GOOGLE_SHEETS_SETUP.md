@@ -9,11 +9,13 @@ Create a sheet with headers in row 1:
 1. `mode`
 2. `annotatedByEmail`
 3. `imageServiceId`
-4. `apiCapturedAtIso`
-5. `apiCapturedAtLocal`
-6. `apiUrl`
-7. `pageUrl`
-8. `method`
+4. `sessionUserName`
+5. `sessionUserEmail`
+6. `apiCapturedAtIso`
+7. `apiCapturedAtLocal`
+8. `apiUrl`
+9. `pageUrl`
+10. `method`
 
 ## 2) Create Apps Script Web App
 
@@ -34,6 +36,8 @@ function doPost(e) {
         r.mode || "",
         r.annotatedByEmail || "",
         r.imageServiceId || "",
+        r.sessionUserName || "",
+        r.sessionUserEmail || "",
         r.apiCapturedAtIso || "",
         r.apiCapturedAtLocal || "",
         r.apiUrl || "",
@@ -75,4 +79,3 @@ const SHEET_WEBHOOK_URL = "https://script.google.com/macros/s/....../exec";
 2. Reload target page.
 3. Trigger requests with `getAnnotations` + `QA_MODE` or `ANNOTATION_MODE`.
 4. Confirm rows appear in the sheet.
-
